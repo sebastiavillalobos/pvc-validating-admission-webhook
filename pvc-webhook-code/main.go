@@ -14,6 +14,7 @@ import (
     admissionv1 "k8s.io/api/admission/v1"
     corev1 "k8s.io/api/core/v1"
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+    "k8s.io/apimachinery/pkg/api/resource"
     "k8s.io/apimachinery/pkg/runtime"
     "k8s.io/apimachinery/pkg/runtime/serializer"
 )
@@ -42,14 +43,14 @@ func httpError(w http.ResponseWriter, err error) {
 func parseAdmissionReview(req *http.Request, deserializer runtime.Decoder) (*admissionv1.AdmissionReview, error) {
     reqData, err := io.ReadAll(req.Body)
     if err != nil {
-        slog.Error("error reading request body", err)
+        slog.Error("error reading request body", "error", err)
         return nil, err
     }
 
     admissionReviewRequest := &admissionv1.AdmissionReview{}
     _, _, err = deserializer.Decode(reqData, nil, admissionReviewRequest)
     if err != nil {
-        slog.Error("unable to deserialize request", err)
+        slog.Error("unable to deserialize request", "error", err)
         return nil, err
     }
     return admissionReviewRequest, nil
@@ -65,6 +66,13 @@ func validate(w http.ResponseWriter, r *http.Request) {
 
     admissionReviewRequest, err := parseAdmissionReview(r, deserializer)
     if err != nil {
+        httpError(w, err)
+        return
+    }
+
+    // Check if admission request is valid
+    if admissionReviewRequest.Request == nil {
+        err := errors.New("admission review request is nil")
         httpError(w, err)
         return
     }
@@ -89,30 +97,72 @@ func validate(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-
-    if pvc.Spec.Resources.Requests[corev1.ResourceStorage].CmpInt64(maxPVCSize) == 1 {
-        err := fmt.Errorf("PVC size exceeds the maximum limit of %d bytes", maxPVCSize)
+    // Check if storage request exists
+    storageRequest, exists := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+    if !exists {
+        err := errors.New("PVC does not have storage request specified")
         httpError(w, err)
         return
     }
 
+    // Convert storage request to bytes for comparison
+    requestedBytes := storageRequest.Value()
+    if requestedBytes > maxPVCSize {
+        // Create proper admission response with rejection
+        admissionResponse := &admissionv1.AdmissionResponse{
+            UID:     admissionReviewRequest.Request.UID,
+            Allowed: false,
+            Result: &metav1.Status{
+                Code:    http.StatusForbidden,
+                Message: fmt.Sprintf("PVC size %s exceeds the maximum limit of %s", storageRequest.String(), resource.NewQuantity(maxPVCSize, resource.BinarySI).String()),
+            },
+        }
+
+        admissionReviewResponse := admissionv1.AdmissionReview{
+            TypeMeta: metav1.TypeMeta{
+                APIVersion: "admission.k8s.io/v1",
+                Kind:       "AdmissionReview",
+            },
+            Response: admissionResponse,
+        }
+
+        responseBytes, err := json.Marshal(admissionReviewResponse)
+        if err != nil {
+            httpError(w, errors.New("unable to marshal rejection response into bytes"))
+            return
+        }
+
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusOK) // Always return 200 OK for admission responses
+        w.Write(responseBytes)
+        slog.Info("PVC rejected", "name", pvc.ObjectMeta.Name, "requested_size", storageRequest.String(), "max_size", resource.NewQuantity(maxPVCSize, resource.BinarySI).String())
+        return
+    }
+
+    // Allow the PVC
     admissionResponse := &admissionv1.AdmissionResponse{
+        UID:     admissionReviewRequest.Request.UID,
         Allowed: true,
     }
 
-    var admissionReviewResponse admissionv1.AdmissionReview
-    admissionReviewResponse.Response = admissionResponse
-    admissionReviewResponse.SetGroupVersionKind(admissionReviewRequest.GroupVersionKind())
-    admissionReviewResponse.Response.UID = admissionReviewRequest.Request.UID
+    admissionReviewResponse := admissionv1.AdmissionReview{
+        TypeMeta: metav1.TypeMeta{
+            APIVersion: "admission.k8s.io/v1",
+            Kind:       "AdmissionReview",
+        },
+        Response: admissionResponse,
+    }
 
     responseBytes, err := json.Marshal(admissionReviewResponse)
     if err != nil {
-        err := errors.New("unable to marshal patch response into bytes")
-        httpError(w, err)
+        httpError(w, errors.New("unable to marshal response into bytes"))
         return
     }
-    slog.Info("validation complete", "PVC validated", pvc.ObjectMeta.Name)
+
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
     w.Write(responseBytes)
+    slog.Info("PVC validated successfully", "name", pvc.ObjectMeta.Name, "requested_size", storageRequest.String())
 }
 
 func main() {
