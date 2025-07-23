@@ -9,6 +9,8 @@ import (
     "io"
     "log"
     "net/http"
+    "os"
+    "strconv"
 
     "golang.org/x/exp/slog"
     admissionv1 "k8s.io/api/admission/v1"
@@ -20,10 +22,10 @@ import (
 )
 
 var (
-    port    int
-    tlsKey  string
-    tlsCert string
-    maxPVCSize int64 = 5 * 1024 * 1024 * 1024 // 5 GiB
+    port       int
+    tlsKey     string
+    tlsCert    string
+    maxPVCSize int64
 )
 
 type PatchOperation struct {
@@ -170,6 +172,20 @@ func main() {
     flag.StringVar(&tlsKey, "tls-key", "/etc/webhook/certs/tls.key", "Private key for TLS")
     flag.StringVar(&tlsCert, "tls-crt", "/etc/webhook/certs/tls.crt", "TLS certificate")
     flag.Parse()
+    
+    // Initialize maxPVCSize from environment variable or default to 5 GiB
+    maxPVCSize = 5 * 1024 * 1024 * 1024 // Default: 5 GiB
+    if maxSizeEnv := os.Getenv("MAX_PVC_SIZE_BYTES"); maxSizeEnv != "" {
+        if parsedSize, err := strconv.ParseInt(maxSizeEnv, 10, 64); err == nil {
+            maxPVCSize = parsedSize
+            slog.Info("using max PVC size from environment", "max_size_bytes", maxPVCSize, "max_size_human", resource.NewQuantity(maxPVCSize, resource.BinarySI).String())
+        } else {
+            slog.Error("invalid MAX_PVC_SIZE_BYTES environment variable, using default", "error", err, "default_size", resource.NewQuantity(maxPVCSize, resource.BinarySI).String())
+        }
+    } else {
+        slog.Info("using default max PVC size", "max_size_bytes", maxPVCSize, "max_size_human", resource.NewQuantity(maxPVCSize, resource.BinarySI).String())
+    }
+    
     slog.Info("loading certs..")
     certs, err := tls.LoadX509KeyPair(tlsCert, tlsKey)
     if err != nil {
