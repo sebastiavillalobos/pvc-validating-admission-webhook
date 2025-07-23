@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: pvc-webhook
+  name: pvc-webhook
+  namespace: cluster-tools
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pvc-webhook
+  template:
+    metadata:
+      labels:
+        app: pvc-webhook
+    spec:
+      containers:
+        - image: sebiuo/pvc-webhook:latest
+          name: pvc-webhook
+          imagePullPolicy: Always
+          args:
+            - --port=9093
+            - --tls-crt=/etc/webhook/certs/tls.crt
+            - --tls-key=/etc/webhook/certs/tls.key
+          ports:
+            - containerPort: 9093
+              name: webhook
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /etc/webhook/certs
+              name: certs
+      volumes:
+        - name: certs
+          secret:
+            secretName: root-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pvc-webhook
+  namespace: cluster-tools
+spec:
+  selector:
+    app: pvc-webhook
+  type: ClusterIP
+  ports:
+  - name: pvc-webhook
+    protocol: TCP
+    port: 443
+    targetPort: 9093
