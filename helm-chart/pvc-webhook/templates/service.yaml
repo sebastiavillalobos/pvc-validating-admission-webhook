@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pvc-webhook.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "pvc-webhook.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+      name: webhook
+  selector:
+    {{- include "pvc-webhook.selectorLabels" . | nindent 4 }}

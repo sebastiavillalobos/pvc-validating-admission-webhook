@@ -1,0 +1,43 @@
+1. The PVC Webhook has been deployed successfully!
+
+2. Webhook Configuration:
+   - Maximum PVC Size: {{ .Values.config.maxPvcSizeBytes }} bytes ({{ div (div (atoi .Values.config.maxPvcSizeBytes) 1024) 1024 | div 1024 }}GB)
+   - Namespace: {{ .Values.namespace }}
+   - Replicas: {{ .Values.replicaCount }}
+
+3. To check the webhook status:
+   kubectl get pods -l app.kubernetes.io/name={{ include "pvc-webhook.name" . }} -n {{ .Values.namespace }}
+
+4. To view webhook logs:
+   kubectl logs -l app.kubernetes.io/name={{ include "pvc-webhook.name" . }} -n {{ .Values.namespace }}
+
+5. To test the webhook, try creating a PVC that exceeds the size limit:
+   kubectl apply -f - <<EOF
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: test-large-pvc
+   spec:
+     accessModes:
+       - ReadWriteOnce
+     resources:
+       requests:
+         storage: 10Gi
+   EOF
+
+6. The webhook will validate PVCs in all namespaces for CREATE and UPDATE operations.
+
+{{- if .Values.certificate.enabled }}
+7. Certificate management is enabled via cert-manager.
+   To check certificate status:
+   kubectl get certificates -n {{ .Values.namespace }}
+{{- end }}
+
+{{- if .Values.autoscaling.enabled }}
+8. Horizontal Pod Autoscaling is enabled:
+   - Min replicas: {{ .Values.autoscaling.minReplicas }}
+   - Max replicas: {{ .Values.autoscaling.maxReplicas }}
+   - CPU target: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}%
+{{- end }}
+
+For more information, visit: https://github.com/your-org/pvc-webhook

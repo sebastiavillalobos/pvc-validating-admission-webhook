@@ -1,0 +1,18 @@
+apiVersion: v2
+name: pvc-webhook
+description: A Kubernetes ValidatingAdmissionWebhook that enforces maximum size limits on PersistentVolumeClaims
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - kubernetes
+  - webhook
+  - admission-controller
+  - pvc
+  - storage
+home: https://github.com/your-org/pvc-webhook
+sources:
+  - https://github.com/your-org/pvc-webhook
+maintainers:
+  - name: Your Team
+    email: team@yourorg.com

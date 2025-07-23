@@ -1,0 +1,107 @@
+# Default values for pvc-webhook.
+# This is a YAML-formatted file.
+# Declare variables to be substituted into your templates.
+
+replicaCount: 1
+
+image:
+  repository: sebiuo/pvc-webhook
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Webhook configuration
+config:
+  # Maximum PVC size in bytes (default: 5 GiB = 5368709120 bytes)
+  maxPvcSizeBytes: "5368709120"
+  port: 9093
+  tlsCertPath: "/etc/webhook/certs/tls.crt"
+  tlsKeyPath: "/etc/webhook/certs/tls.key"
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 443
+  targetPort: 9093
+
+# Deployment configuration
+deployment:
+  annotations: {}
+  labels: {}
+
+# Pod configuration
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Autoscaling configuration
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Node labels for pod assignment
+nodeSelector: {}
+
+# Toleration labels for pod assignment
+tolerations: []
+
+# Affinity settings
+affinity: {}
+
+# Namespace where the webhook will be deployed
+namespace: cluster-tools
+
+# TLS Certificate configuration
+certificate:
+  enabled: true
+  # Certificate manager issuer
+  issuer:
+    # Create a self-signed cluster issuer
+    createSelfSigned: true
+    name: "selfsigned-issuer"
+  # Certificate details
+  name: "pvc-webhook"
+  secretName: "root-secret"
+  dnsNames:
+    - "pvc-webhook.cluster-tools.svc"
+  commonName: "pvc-webhook"
+
+# ValidatingWebhookConfiguration
+webhook:
+  enabled: true
+  name: "pvc-webhook"
+  failurePolicy: Fail
+  sideEffects: None
+  admissionReviewVersions:
+    - "v1"
+  rules:
+    - operations: ["CREATE", "UPDATE"]
+      apiGroups: [""]
+      apiVersions: ["v1"]
+      resources: ["persistentvolumeclaims"]
+      scope: "Namespaced"

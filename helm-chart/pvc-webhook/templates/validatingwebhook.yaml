@@ -1,0 +1,26 @@
+{{- if .Values.webhook.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ .Values.webhook.name }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Values.namespace }}/{{ .Values.certificate.name }}
+webhooks:
+  - name: {{ include "pvc-webhook.fullname" . }}.{{ .Values.namespace }}.svc
+    clientConfig:
+      service:
+        name: {{ include "pvc-webhook.fullname" . }}
+        namespace: {{ .Values.namespace }}
+        path: /validate
+    rules:
+      {{- range .Values.webhook.rules }}
+      - operations: {{ .operations | toJson }}
+        apiGroups: {{ .apiGroups | toJson }}
+        apiVersions: {{ .apiVersions | toJson }}
+        resources: {{ .resources | toJson }}
+        scope: {{ .scope }}
+      {{- end }}
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    sideEffects: {{ .Values.webhook.sideEffects }}
+    admissionReviewVersions: {{ .Values.webhook.admissionReviewVersions | toJson }}
+{{- end }}
