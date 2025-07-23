@@ -23,6 +23,9 @@ spec:
             - --port=9093
             - --tls-crt=/etc/webhook/certs/tls.crt
             - --tls-key=/etc/webhook/certs/tls.key
+          env:
+            - name: MAX_PVC_SIZE_BYTES
+              value: "5368709120"  # 5 GiB in bytes (5 * 1024^3)
           ports:
             - containerPort: 9093
               name: webhook
